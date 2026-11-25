@@ -1,0 +1,63 @@
+name: Build Fcitx5 for KeyCat
+
+on:
+  push:
+    branches: [fcitx-keycat-build]
+    paths:
+      - '.github/workflows/build-fcitx5.yml'
+      - 'patches/fcitx5-keycat-0.1.3.patch'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  keyboard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      BUILD_ABI: arm64-v8a
+    steps:
+      - name: Checkout bridge patch
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check out Fcitx5 for Android 0.1.3
+        run: |
+          git clone --branch 0.1.3 https://github.com/fcitx5-android/fcitx5-android.git upstream
+          test "$(git -C upstream rev-parse HEAD)" = 048f581c652367567b8ee5c28c5163b805288895
+          git -C upstream submodule update --init --recursive --jobs 4
+          git -C upstream apply --check "$GITHUB_WORKSPACE/patches/fcitx5-keycat-0.1.3.patch"
+          git -C upstream apply "$GITHUB_WORKSPACE/patches/fcitx5-keycat-0.1.3.patch"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y extra-cmake-modules gettext
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platforms;android-36 build-tools;36.1.0 ndk;28.0.13004108 cmake;3.31.6'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build keyboard APK
+        working-directory: upstream
+        run: ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Upload keyboard APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: Fcitx5-KeyCat-0.1.3-arm64
+          path: upstream/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 7
