@@ -39,8 +39,359 @@ index fcc089b..f9b38c6 100644
      <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
  
      <!-- remove intent queries merged from library manifest (namely Android-Image-Cropper) -->
+diff --git a/app/src/main/java/org/fcitx/fcitx5/android/data/theme/ThemeManager.kt b/app/src/main/java/org/fcitx/fcitx5/android/data/theme/ThemeManager.kt
+index 93ba4d4..f25b694 100644
+--- a/app/src/main/java/org/fcitx/fcitx5/android/data/theme/ThemeManager.kt
++++ b/app/src/main/java/org/fcitx/fcitx5/android/data/theme/ThemeManager.kt
+@@ -24,6 +24,7 @@ object ThemeManager {
+     }
+ 
+     val BuiltinThemes = listOf(
++        ThemePreset.RetroSilver26,
+         ThemePreset.MaterialLight,
+         ThemePreset.MaterialDark,
+         ThemePreset.PixelLight,
+diff --git a/app/src/main/java/org/fcitx/fcitx5/android/data/theme/ThemePreset.kt b/app/src/main/java/org/fcitx/fcitx5/android/data/theme/ThemePreset.kt
+index 239e22c..e8ad9c9 100644
+--- a/app/src/main/java/org/fcitx/fcitx5/android/data/theme/ThemePreset.kt
++++ b/app/src/main/java/org/fcitx/fcitx5/android/data/theme/ThemePreset.kt
+@@ -6,6 +6,33 @@ package org.fcitx.fcitx5.android.data.theme
+ 
+ object ThemePreset {
+ 
++    val RetroSilver26 = Theme.Builtin(
++        name = "KeyCat · 复古银灰 26（内置）",
++        isDark = false,
++        backgroundColor = 0xffc6cdd5,
++        barColor = 0xffd7dde4,
++        keyboardColor = 0xffc6cdd5,
++        keyBackgroundColor = 0xfff8f9fa,
++        keyTextColor = 0xff252a30,
++        candidateTextColor = 0xff252a30,
++        candidateLabelColor = 0xff4b5660,
++        candidateCommentColor = 0xff4b5660,
++        altKeyBackgroundColor = 0xffafb8c2,
++        altKeyTextColor = 0xff212830,
++        accentKeyBackgroundColor = 0xffafb8c2,
++        accentKeyTextColor = 0xff212830,
++        keyPressHighlightColor = 0x33253444,
++        keyShadowColor = 0xff929da7,
++        popupBackgroundColor = 0xfff8f9fa,
++        popupTextColor = 0xff252a30,
++        spaceBarColor = 0xfff8f9fa,
++        dividerColor = 0xffa5afba,
++        clipboardEntryColor = 0xfff8f9fa,
++        genericActiveBackgroundColor = 0xffebdbd6,
++        genericActiveForegroundColor = 0xff92463d
++    )
++
++
+     val MaterialLight = Theme.Builtin(
+         name = "MaterialLight",
+         isDark = false,
+@@ -305,3 +332,6 @@ object ThemePreset {
+     )
+ 
+ }
++
++internal val Theme.isRetroSilver26: Boolean
++    get() = this === ThemePreset.RetroSilver26
+diff --git a/app/src/main/java/org/fcitx/fcitx5/android/input/bar/KawaiiBarComponent.kt b/app/src/main/java/org/fcitx/fcitx5/android/input/bar/KawaiiBarComponent.kt
+index fe90eda..133ee73 100644
+--- a/app/src/main/java/org/fcitx/fcitx5/android/input/bar/KawaiiBarComponent.kt
++++ b/app/src/main/java/org/fcitx/fcitx5/android/input/bar/KawaiiBarComponent.kt
+@@ -30,11 +30,14 @@ import org.fcitx.fcitx5.android.R
+ import org.fcitx.fcitx5.android.core.CapabilityFlag
+ import org.fcitx.fcitx5.android.core.CapabilityFlags
+ import org.fcitx.fcitx5.android.core.FcitxEvent.CandidateListEvent
++import org.fcitx.fcitx5.android.core.FcitxEvent.InputPanelEvent
++import org.fcitx.fcitx5.android.core.FormattedText
+ import org.fcitx.fcitx5.android.data.clipboard.ClipboardManager
+ import org.fcitx.fcitx5.android.data.clipboard.db.ClipboardEntry
+ import org.fcitx.fcitx5.android.data.prefs.AppPrefs
+ import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
+ import org.fcitx.fcitx5.android.data.theme.ThemeManager
++import org.fcitx.fcitx5.android.data.theme.isRetroSilver26
+ import org.fcitx.fcitx5.android.input.bar.ExpandButtonStateMachine.State.ClickToAttachWindow
+ import org.fcitx.fcitx5.android.input.bar.ExpandButtonStateMachine.State.ClickToDetachWindow
+ import org.fcitx.fcitx5.android.input.bar.ExpandButtonStateMachine.State.Hidden
+@@ -63,6 +66,7 @@ import org.fcitx.fcitx5.android.input.keyboard.CommonKeyActionListener
+ import org.fcitx.fcitx5.android.input.keyboard.CustomGestureView
+ import org.fcitx.fcitx5.android.input.keyboard.KeyboardWindow
+ import org.fcitx.fcitx5.android.input.popup.PopupComponent
++import org.fcitx.fcitx5.android.input.preedit.useInlineRetroPreedit
+ import org.fcitx.fcitx5.android.input.status.StatusAreaWindow
+ import org.fcitx.fcitx5.android.input.wm.InputWindow
+ import org.fcitx.fcitx5.android.input.wm.InputWindowManager
+@@ -333,6 +337,20 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
+         }
+     }
+ 
++    private var retroInputPanel = InputPanelEvent.Data()
++    private var retroClientPreedit = FormattedText.Empty
++
++    private fun updateRetroComposition() {
++        val panel = retroInputPanel
++        val text = when {
++            panel.useInlineRetroPreedit() -> panel.preedit
++            panel.preedit.isEmpty() && panel.auxUp.isEmpty() && panel.auxDown.isEmpty() &&
++                retroClientPreedit.length in 1..8 -> retroClientPreedit
++            else -> FormattedText.Empty
++        }
++        candidateUi.updateComposition(text.toSpannedString(theme.genericActiveBackgroundColor))
++    }
++
+     private val candidateUi by lazy {
+         CandidateUi(context, theme, horizontalCandidate.view).apply {
+             expandButton.apply {
+@@ -409,9 +427,11 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
+ 
+     override val view by lazy {
+         ViewAnimator(context).apply {
+-            backgroundColor =
+-                if (ThemeManager.prefs.keyBorder.getValue()) Color.TRANSPARENT
+-                else theme.barColor
++            backgroundColor = when {
++                theme.isRetroSilver26 -> theme.backgroundColor
++                ThemeManager.prefs.keyBorder.getValue() -> Color.TRANSPARENT
++                else -> theme.barColor
++            }
+             add(idleUi.root, lParams(matchParent, matchParent))
+             add(candidateUi.root, lParams(matchParent, matchParent))
+             add(titleUi.root, lParams(matchParent, matchParent))
+@@ -451,6 +471,18 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
+         evalIdleUiState()
+     }
+ 
++    override fun onClientPreeditUpdate(data: FormattedText) {
++        if (!theme.isRetroSilver26) return
++        retroClientPreedit = data
++        updateRetroComposition()
++    }
++
++    override fun onInputPanelUpdate(data: InputPanelEvent.Data) {
++        if (!theme.isRetroSilver26) return
++        retroInputPanel = data
++        updateRetroComposition()
++    }
++
+     override fun onPreeditEmptyStateUpdate(empty: Boolean) {
+         barStateMachine.push(PreeditUpdated, PreeditEmpty to empty)
+     }
+diff --git a/app/src/main/java/org/fcitx/fcitx5/android/input/bar/ui/CandidateUi.kt b/app/src/main/java/org/fcitx/fcitx5/android/input/bar/ui/CandidateUi.kt
+index bb756df..ba97235 100644
+--- a/app/src/main/java/org/fcitx/fcitx5/android/input/bar/ui/CandidateUi.kt
++++ b/app/src/main/java/org/fcitx/fcitx5/android/input/bar/ui/CandidateUi.kt
+@@ -5,10 +5,17 @@
+ package org.fcitx.fcitx5.android.input.bar.ui
+ 
+ import android.content.Context
++import android.graphics.Typeface
++import android.text.TextUtils
++import android.view.Gravity
+ import android.view.View
++import android.widget.TextView
+ import org.fcitx.fcitx5.android.R
+ import org.fcitx.fcitx5.android.data.theme.Theme
++import org.fcitx.fcitx5.android.data.theme.isRetroSilver26
++import org.fcitx.fcitx5.android.input.keyboard.insetRadiusDrawable
+ import splitties.dimensions.dp
++import splitties.views.dsl.constraintlayout.after
+ import splitties.views.dsl.constraintlayout.before
+ import splitties.views.dsl.constraintlayout.centerVertically
+ import splitties.views.dsl.constraintlayout.constraintLayout
+@@ -17,6 +24,7 @@ import splitties.views.dsl.constraintlayout.lParams
+ import splitties.views.dsl.constraintlayout.startOfParent
+ import splitties.views.dsl.core.Ui
+ import splitties.views.dsl.core.add
++import splitties.views.dsl.core.wrapContent
+ 
+ class CandidateUi(override val ctx: Context, theme: Theme, private val horizontalView: View) : Ui {
+ 
+@@ -25,14 +33,38 @@ class CandidateUi(override val ctx: Context, theme: Theme, private val horizonta
+         visibility = View.INVISIBLE
+     }
+ 
++    private val composition = TextView(ctx).apply {
++        setSingleLine(true)
++        typeface = Typeface.MONOSPACE
++        textSize = 14f
++        setTextColor(theme.candidateLabelColor)
++        ellipsize = TextUtils.TruncateAt.START
++        maxWidth = dp(68)
++        gravity = Gravity.CENTER
++        setPadding(dp(10), 0, dp(8), 0)
++        visibility = View.GONE
++    }
++
++    fun updateComposition(text: CharSequence) {
++        composition.text = text
++        composition.visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
++    }
++
+     override val root = ctx.constraintLayout {
++        if (theme.isRetroSilver26) {
++            background = insetRadiusDrawable(dp(3), dp(2), dp(5f), theme.barColor)
++            add(composition, lParams(wrapContent) {
++                centerVertically()
++                startOfParent()
++            })
++        }
+         add(expandButton, lParams(dp(40)) {
+             centerVertically()
+             endOfParent()
+         })
+         add(horizontalView, lParams {
+             centerVertically()
+-            startOfParent()
++            if (theme.isRetroSilver26) after(composition) else startOfParent()
+             before(expandButton)
+         })
+     }
+diff --git a/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/CandidateItemUi.kt b/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/CandidateItemUi.kt
+index 5dbfb80..c5a5c8b 100644
+--- a/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/CandidateItemUi.kt
++++ b/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/CandidateItemUi.kt
+@@ -44,8 +44,8 @@ class CandidateItemUi(override val ctx: Context, val theme: Theme) : Ui {
+         })
+     }
+ 
+-    fun updateCandidate(candidate: CandidateWord) {
+-        val fg = theme.candidateTextColor
++    fun updateCandidate(candidate: CandidateWord, firstCandidate: Boolean = false) {
++        val fg = if (firstCandidate) theme.genericActiveForegroundColor else theme.candidateTextColor
+         val altFg = theme.candidateCommentColor
+         text.text = buildSpannedString {
+             color(fg) {
+diff --git a/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/CandidateViewHolder.kt b/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/CandidateViewHolder.kt
+index 8264ba0..b613ff8 100644
+--- a/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/CandidateViewHolder.kt
++++ b/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/CandidateViewHolder.kt
+@@ -15,11 +15,14 @@ class CandidateViewHolder(val ui: CandidateItemUi) : RecyclerView.ViewHolder(ui.
+     var candidate: CandidateWord = CandidateWord.Empty
+         private set
+ 
+-    fun update(newIndex: Int, newCandidate: CandidateWord) {
++    private var firstCandidate = false
++
++    fun update(newIndex: Int, newCandidate: CandidateWord, emphasize: Boolean = false) {
+         idx = newIndex
+-        if (candidate != newCandidate) {
++        if (candidate != newCandidate || firstCandidate != emphasize) {
+             candidate = newCandidate
+-            ui.updateCandidate(newCandidate)
++            firstCandidate = emphasize
++            ui.updateCandidate(newCandidate, firstCandidate)
+         }
+     }
+ 
+diff --git a/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/horizontal/HorizontalCandidateComponent.kt b/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/horizontal/HorizontalCandidateComponent.kt
+index 6121a82..11fab76 100644
+--- a/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/horizontal/HorizontalCandidateComponent.kt
++++ b/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/horizontal/HorizontalCandidateComponent.kt
+@@ -18,6 +18,7 @@ import org.fcitx.fcitx5.android.R
+ import org.fcitx.fcitx5.android.core.FcitxEvent
+ import org.fcitx.fcitx5.android.daemon.launchOnReady
+ import org.fcitx.fcitx5.android.data.prefs.AppPrefs
++import org.fcitx.fcitx5.android.data.theme.isRetroSilver26
+ import org.fcitx.fcitx5.android.input.bar.ExpandButtonStateMachine.BooleanKey.ExpandedCandidatesEmpty
+ import org.fcitx.fcitx5.android.input.bar.ExpandButtonStateMachine.TransitionEvent.ExpandedCandidatesUpdated
+ import org.fcitx.fcitx5.android.input.bar.KawaiiBarComponent
+@@ -139,11 +140,13 @@ class HorizontalCandidateComponent :
+         }
+     }
+ 
++    private val dividerWidth
++        get() = if (theme.isRetroSilver26) 0 else max(1, context.dp(1))
++
+     private val dividerDrawable by lazy {
+         ShapeDrawable(RectShape()).apply {
+-            val intrinsicSize = max(1, context.dp(1))
+-            intrinsicWidth = intrinsicSize
+-            intrinsicHeight = intrinsicSize
++            intrinsicWidth = dividerWidth
++            intrinsicHeight = dividerWidth
+             paint.color = theme.dividerColor
+         }
+     }
+@@ -154,7 +157,7 @@ class HorizontalCandidateComponent :
+                 super.onSizeChanged(w, h, oldw, oldh)
+                 if (fillStyle == AutoFillWidth) {
+                     val maxSpanCount = maxSpanCountPref.getValue()
+-                    layoutMinWidth = w / maxSpanCount - dividerDrawable.intrinsicWidth
++                    layoutMinWidth = w / maxSpanCount - dividerWidth
+                 }
+             }
+         }.apply {
+@@ -162,7 +165,7 @@ class HorizontalCandidateComponent :
+             itemAnimator = null
+             adapter = this@HorizontalCandidateComponent.adapter
+             layoutManager = this@HorizontalCandidateComponent.layoutManager
+-            addItemDecoration(FlexboxVerticalDecoration(dividerDrawable))
++            if (!theme.isRetroSilver26) addItemDecoration(FlexboxVerticalDecoration(dividerDrawable))
+         }
+     }
+ 
+@@ -177,7 +180,7 @@ class HorizontalCandidateComponent :
+                 secondLayoutPassNeeded = false
+             }
+             AutoFillWidth -> {
+-                layoutMinWidth = view.width / maxSpanCount - dividerDrawable.intrinsicWidth
++                layoutMinWidth = view.width / maxSpanCount - dividerWidth
+                 layoutFlexGrow = if (candidates.size < maxSpanCount) 0f else 1f
+                 // [^1] total candidates count < maxSpanCount
+                 secondLayoutPassNeeded = candidates.size < maxSpanCount
+diff --git a/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/horizontal/HorizontalCandidateViewAdapter.kt b/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/horizontal/HorizontalCandidateViewAdapter.kt
+index 30691c2..fb975e5 100644
+--- a/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/horizontal/HorizontalCandidateViewAdapter.kt
++++ b/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/horizontal/HorizontalCandidateViewAdapter.kt
+@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.RecyclerView
+ import com.google.android.flexbox.FlexboxLayoutManager
+ import org.fcitx.fcitx5.android.core.CandidateWord
+ import org.fcitx.fcitx5.android.data.theme.Theme
++import org.fcitx.fcitx5.android.data.theme.isRetroSilver26
+ import org.fcitx.fcitx5.android.input.candidates.CandidateItemUi
+ import org.fcitx.fcitx5.android.input.candidates.CandidateViewHolder
+ import splitties.dimensions.dp
+@@ -56,7 +57,7 @@ open class HorizontalCandidateViewAdapter(val theme: Theme) :
+ 
+     @CallSuper
+     override fun onBindViewHolder(holder: CandidateViewHolder, position: Int) {
+-        holder.update(position, candidates[position])
++        holder.update(position, candidates[position], emphasize = theme.isRetroSilver26 && position == 0)
+     }
+ 
+     @CallSuper
+diff --git a/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/BaseKeyboard.kt b/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/BaseKeyboard.kt
+index 84a2144..0226bd0 100644
+--- a/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/BaseKeyboard.kt
++++ b/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/BaseKeyboard.kt
+@@ -46,7 +46,8 @@ import kotlin.math.roundToInt
+ abstract class BaseKeyboard(
+     context: Context,
+     protected val theme: Theme,
+-    private val keyLayout: List<List<KeyDef>>
++    private val keyLayout: List<List<KeyDef>>,
++    private val retroKeycaps: Boolean = false
+ ) : ConstraintLayout(context) {
+ 
+     var keyActionListener: KeyActionListener? = null
+@@ -146,10 +147,10 @@ abstract class BaseKeyboard(
+ 
+     private fun createKeyView(def: KeyDef): KeyView {
+         return when (def.appearance) {
+-            is KeyDef.Appearance.AltText -> AltTextKeyView(context, theme, def.appearance)
++            is KeyDef.Appearance.AltText -> AltTextKeyView(context, theme, def.appearance, retroKeycaps)
+             is KeyDef.Appearance.ImageText -> ImageTextKeyView(context, theme, def.appearance)
+-            is KeyDef.Appearance.Text -> TextKeyView(context, theme, def.appearance)
+-            is KeyDef.Appearance.Image -> ImageKeyView(context, theme, def.appearance)
++            is KeyDef.Appearance.Text -> TextKeyView(context, theme, def.appearance, retroKeycaps)
++            is KeyDef.Appearance.Image -> ImageKeyView(context, theme, def.appearance, retroKeycaps)
+         }.apply {
+             soundEffect = when (def) {
+                 is SpaceKey -> InputFeedbacks.SoundEffect.SpaceBar
 diff --git a/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/CommonKeyActionListener.kt b/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/CommonKeyActionListener.kt
-index 3847b97..fabe353 100644
+index 3847b97..e14489d 100644
 --- a/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/CommonKeyActionListener.kt
 +++ b/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/CommonKeyActionListener.kt
 @@ -89,6 +89,7 @@ class CommonKeyActionListener :
@@ -51,6 +402,27 @@ index 3847b97..fabe353 100644
              when (action) {
                  is FcitxKeyAction -> service.postFcitxJob {
                      sendKey(action.act, action.states.states, action.code)
+@@ -131,6 +132,7 @@ class CommonKeyActionListener :
+                         }
+                     }
+                 }
++                is KeyAction.ToggleImeAction -> service.postFcitxJob { toggleIme() }
+                 is ShowInputMethodPickerAction -> showInputMethodPicker()
+                 is MoveSelectionAction -> {
+                     when (backspaceSwipeState) {
+diff --git a/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/KeyAction.kt b/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/KeyAction.kt
+index 192cfba..ff2bfe4 100644
+--- a/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/KeyAction.kt
++++ b/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/KeyAction.kt
+@@ -29,6 +29,8 @@ sealed class KeyAction {
+ 
+     data object LangSwitchAction : KeyAction()
+ 
++    data object ToggleImeAction : KeyAction()
++
+     data object ShowInputMethodPickerAction : KeyAction()
+ 
+     data class LayoutSwitchAction(val act: String = "") : KeyAction()
 diff --git a/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/KeyCatAnimation.kt b/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/KeyCatAnimation.kt
 new file mode 100644
 index 0000000..868c131
@@ -121,3 +493,404 @@ index 0000000..868c131
 +        else -> null
 +    }
 +}
+diff --git a/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/KeyDefPreset.kt b/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/KeyDefPreset.kt
+index c331341..e6dc2b5 100644
+--- a/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/KeyDefPreset.kt
++++ b/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/KeyDefPreset.kt
+@@ -127,10 +127,11 @@ class LayoutSwitchKey(
+ 
+ class BackspaceKey(
+     percentWidth: Float = 0.15f,
+-    variant: Variant = Variant.Alternative
++    variant: Variant = Variant.Alternative,
++    @DrawableRes icon: Int = R.drawable.ic_baseline_backspace_24
+ ) : KeyDef(
+     Appearance.Image(
+-        src = R.drawable.ic_baseline_backspace_24,
++        src = icon,
+         percentWidth = percentWidth,
+         variant = variant,
+         viewId = R.id.button_backspace,
+@@ -157,14 +158,19 @@ class QuickPhraseKey : KeyDef(
+ class CommaKey(
+     percentWidth: Float,
+     variant: Variant,
++    showIcon: Boolean = true
+ ) : KeyDef(
+-    Appearance.ImageText(
+-        displayText = ",",
+-        textSize = 23f,
+-        percentWidth = percentWidth,
+-        variant = variant,
+-        src = R.drawable.ic_baseline_tag_faces_24
+-    ),
++    if (showIcon) {
++        Appearance.ImageText(
++            displayText = ",",
++            textSize = 23f,
++            percentWidth = percentWidth,
++            variant = variant,
++            src = R.drawable.ic_baseline_tag_faces_24
++        )
++    } else {
++        Appearance.Text(displayText = ",", textSize = 21f, percentWidth = percentWidth, variant = variant)
++    },
+     setOf(
+         Behavior.Press(KeyAction.FcitxKeyAction(","))
+     ),
+@@ -204,10 +210,10 @@ class LanguageKey : KeyDef(
+     )
+ )
+ 
+-class SpaceKey : KeyDef(
++class SpaceKey(label: String = " ") : KeyDef(
+     Appearance.Text(
+-        displayText = " ",
+-        textSize = 13f,
++        displayText = label,
++        textSize = if (label.isBlank()) 13f else 16f,
+         percentWidth = 0f,
+         border = Border.Special,
+         viewId = R.id.button_space,
+diff --git a/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/KeyView.kt b/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/KeyView.kt
+index 9bfc478..b8a278a 100644
+--- a/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/KeyView.kt
++++ b/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/KeyView.kt
+@@ -51,8 +51,12 @@ import splitties.views.padding
+ import kotlin.math.min
+ import kotlin.math.roundToInt
+ 
+-abstract class KeyView(ctx: Context, val theme: Theme, val def: KeyDef.Appearance) :
+-    CustomGestureView(ctx) {
++abstract class KeyView(
++    ctx: Context,
++    val theme: Theme,
++    val def: KeyDef.Appearance,
++    protected val retroKeycap: Boolean = false
++) : CustomGestureView(ctx) {
+ 
+     val bordered: Boolean
+     val borderStroke: Boolean
+@@ -63,17 +67,17 @@ abstract class KeyView(ctx: Context, val theme: Theme, val def: KeyDef.Appearanc
+ 
+     init {
+         val prefs = ThemeManager.prefs
+-        bordered = prefs.keyBorder.getValue()
+-        borderStroke = prefs.keyBorderStroke.getValue()
++        bordered = retroKeycap || prefs.keyBorder.getValue()
++        borderStroke = !retroKeycap && prefs.keyBorderStroke.getValue()
+         rippled = prefs.keyRippleEffect.getValue()
+-        radius = dp(prefs.keyRadius.getValue().toFloat())
++        radius = dp(if (retroKeycap) 3f else prefs.keyRadius.getValue().toFloat())
+         val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+         val hMarginPref =
+             if (landscape) prefs.keyHorizontalMarginLandscape else prefs.keyHorizontalMargin
+         val vMarginPref =
+             if (landscape) prefs.keyVerticalMarginLandscape else prefs.keyVerticalMargin
+-        hMargin = if (def.margin) dp(hMarginPref.getValue()) else 0
+-        vMargin = if (def.margin) dp(vMarginPref.getValue()) else 0
++        hMargin = if (def.margin) dp(if (retroKeycap) 2 else hMarginPref.getValue()) else 0
++        vMargin = if (def.margin) dp(if (retroKeycap) 3 else vMarginPref.getValue()) else 0
+     }
+ 
+     private val cachedLocation = intArrayOf(0, 0)
+@@ -249,8 +253,12 @@ abstract class KeyView(ctx: Context, val theme: Theme, val def: KeyDef.Appearanc
+ }
+ 
+ @SuppressLint("ViewConstructor")
+-open class TextKeyView(ctx: Context, theme: Theme, def: KeyDef.Appearance.Text) :
+-    KeyView(ctx, theme, def) {
++open class TextKeyView(
++    ctx: Context,
++    theme: Theme,
++    def: KeyDef.Appearance.Text,
++    retroKeycap: Boolean = false
++) : KeyView(ctx, theme, def, retroKeycap) {
+     val mainText = view(::AutoScaleTextView) {
+         isClickable = false
+         isFocusable = false
+@@ -259,7 +267,10 @@ open class TextKeyView(ctx: Context, theme: Theme, def: KeyDef.Appearance.Text)
+         setTextSize(TypedValue.COMPLEX_UNIT_DIP, def.textSize)
+         textDirection = View.TEXT_DIRECTION_FIRST_STRONG_LTR
+         // keep original typeface, apply textStyle only
+-        setTypeface(typeface, def.textStyle)
++        setTypeface(
++            typeface,
++            if (retroKeycap && def is KeyDef.Appearance.AltText) Typeface.BOLD else def.textStyle
++        )
+         setTextColor(
+             when (def.variant) {
+                 Variant.Normal -> theme.keyTextColor
+@@ -274,24 +285,41 @@ open class TextKeyView(ctx: Context, theme: Theme, def: KeyDef.Appearance.Text)
+             add(mainText, lParams(wrapContent, wrapContent) {
+                 centerInParent()
+             })
++            if (retroKeycap && def.viewId == R.id.button_space) {
++                add(view(::View) {
++                    background = radiusDrawable(dp(1f), theme.genericActiveForegroundColor)
++                    importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
++                }, lParams(dp(14), dp(2)) {
++                    centerHorizontally()
++                    bottomToBottom = parentId
++                    bottomMargin = vMargin + dp(4)
++                })
++            }
+         }
+     }
+ }
+ 
+ @SuppressLint("ViewConstructor")
+-class AltTextKeyView(ctx: Context, theme: Theme, def: KeyDef.Appearance.AltText) :
+-    TextKeyView(ctx, theme, def) {
++class AltTextKeyView(
++    ctx: Context,
++    theme: Theme,
++    def: KeyDef.Appearance.AltText,
++    retroKeycap: Boolean = false
++) : TextKeyView(ctx, theme, def, retroKeycap) {
++    private val showRetroDigit = def.altText.length == 1 && def.altText[0] in '0'..'9'
++
+     val altText = view(::AutoScaleTextView) {
+         isClickable = false
+         isFocusable = false
+         // TODO hardcoded alt text size
+         setTextSize(TypedValue.COMPLEX_UNIT_DIP, 10.666667f)
+-        setTypeface(typeface, Typeface.BOLD)
++        setTypeface(typeface, if (retroKeycap) Typeface.NORMAL else Typeface.BOLD)
+         text = def.altText
+         textDirection = View.TEXT_DIRECTION_FIRST_STRONG_LTR
+         setTextColor(
+             when (def.variant) {
+-                Variant.Normal, Variant.AltForeground, Variant.Alternative -> theme.altKeyTextColor
++                Variant.Normal, Variant.AltForeground, Variant.Alternative ->
++                    if (retroKeycap) theme.candidateCommentColor else theme.altKeyTextColor
+                 Variant.Accent -> theme.accentKeyTextColor
+             }
+         )
+@@ -357,6 +385,10 @@ class AltTextKeyView(ctx: Context, theme: Theme, def: KeyDef.Appearance.AltText)
+     }
+ 
+     private fun applyLayout(orientation: Int) {
++        if (retroKeycap) {
++            if (showRetroDigit) applyTopRightAltTextPosition() else applyNoAltTextPosition()
++            return
++        }
+         when (ThemeManager.prefs.punctuationPosition.getValue()) {
+             PunctuationPosition.Bottom -> when (orientation) {
+                 Configuration.ORIENTATION_LANDSCAPE -> applyTopRightAltTextPosition()
+@@ -376,8 +408,12 @@ class AltTextKeyView(ctx: Context, theme: Theme, def: KeyDef.Appearance.AltText)
+ }
+ 
+ @SuppressLint("ViewConstructor")
+-class ImageKeyView(ctx: Context, theme: Theme, def: KeyDef.Appearance.Image) :
+-    KeyView(ctx, theme, def) {
++class ImageKeyView(
++    ctx: Context,
++    theme: Theme,
++    def: KeyDef.Appearance.Image,
++    retroKeycap: Boolean = false
++) : KeyView(ctx, theme, def, retroKeycap) {
+     val img = imageView { configure(theme, def.src, def.variant) }
+ 
+     init {
+diff --git a/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/TextKeyboard.kt b/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/TextKeyboard.kt
+index 368cf6c..74cd5fd 100644
+--- a/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/TextKeyboard.kt
++++ b/app/src/main/java/org/fcitx/fcitx5/android/input/keyboard/TextKeyboard.kt
+@@ -16,6 +16,7 @@ import org.fcitx.fcitx5.android.core.KeyStates
+ import org.fcitx.fcitx5.android.data.prefs.AppPrefs
+ import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
+ import org.fcitx.fcitx5.android.data.theme.Theme
++import org.fcitx.fcitx5.android.data.theme.isRetroSilver26
+ import org.fcitx.fcitx5.android.input.popup.PopupAction
+ import splitties.views.imageResource
+ 
+@@ -23,7 +24,12 @@ import splitties.views.imageResource
+ class TextKeyboard(
+     context: Context,
+     theme: Theme
+-) : BaseKeyboard(context, theme, Layout) {
++) : BaseKeyboard(
++    context,
++    theme,
++    if (theme.isRetroSilver26) retroLayout(context) else Layout,
++    retroKeycaps = theme.isRetroSilver26
++) {
+ 
+     enum class CapsState { None, Once, Lock }
+ 
+@@ -74,12 +80,37 @@ class TextKeyboard(
+                 ReturnKey()
+             )
+         )
++
++        private fun retroLayout(context: Context): List<List<KeyDef>> =
++            Layout.take(2) + listOf(
++                Layout[2].dropLast(1) + BackspaceKey(icon = R.drawable.ic_keycat_backspace_24),
++                listOf(
++                    LayoutSwitchKey("123", "", 0.135f),
++                    KeyDef(
++                        KeyDef.Appearance.Text(
++                            displayText = context.getString(R.string.keycat_retro_language),
++                            textSize = 14f,
++                            percentWidth = 0.14f,
++                            variant = KeyDef.Appearance.Variant.Alternative,
++                            viewId = R.id.button_lang
++                        ),
++                        setOf(
++                            KeyDef.Behavior.Press(KeyAction.ToggleImeAction),
++                            KeyDef.Behavior.LongPress(KeyAction.ShowInputMethodPickerAction)
++                        )
++                    ),
++                    CommaKey(0.095f, KeyDef.Appearance.Variant.Normal, showIcon = false),
++                    SpaceKey(context.getString(R.string.keycat_retro_space)),
++                    SymbolKey(".", 0.095f),
++                    ReturnKey(0.19f)
++                )
++            )
+     }
+ 
+     val caps: ImageKeyView by lazy { findViewById(R.id.button_caps) }
+     val backspace: ImageKeyView by lazy { findViewById(R.id.button_backspace) }
+     val quickphrase: ImageKeyView by lazy { findViewById(R.id.button_quickphrase) }
+-    val lang: ImageKeyView by lazy { findViewById(R.id.button_lang) }
++    val lang: KeyView by lazy { findViewById(R.id.button_lang) }
+     val space: TextKeyView by lazy { findViewById(R.id.button_space) }
+     val `return`: ImageKeyView by lazy { findViewById(R.id.button_return) }
+ 
+@@ -165,9 +196,15 @@ class TextKeyboard(
+     }
+ 
+     override fun onInputMethodUpdate(ime: InputMethodEntry) {
+-        space.mainText.text = buildString {
+-            append(ime.displayName)
+-            ime.subMode.run { label.ifEmpty { name.ifEmpty { null } } }?.let { append(" ($it)") }
++        if (theme.isRetroSilver26) {
++            space.contentDescription = context.getString(
++                R.string.keycat_retro_space_input_method, ime.displayName
++            )
++        } else {
++            space.mainText.text = buildString {
++                append(ime.displayName)
++                ime.subMode.run { label.ifEmpty { name.ifEmpty { null } } }?.let { append(" ($it)") }
++            }
+         }
+         if (capsState != CapsState.None) {
+             switchCapsState()
+diff --git a/app/src/main/java/org/fcitx/fcitx5/android/input/preedit/PreeditComponent.kt b/app/src/main/java/org/fcitx/fcitx5/android/input/preedit/PreeditComponent.kt
+index 0f2c4a5..b4a6b4d 100644
+--- a/app/src/main/java/org/fcitx/fcitx5/android/input/preedit/PreeditComponent.kt
++++ b/app/src/main/java/org/fcitx/fcitx5/android/input/preedit/PreeditComponent.kt
+@@ -8,6 +8,7 @@ import android.view.View
+ import org.fcitx.fcitx5.android.core.FcitxEvent
+ import org.fcitx.fcitx5.android.data.theme.Theme
+ import org.fcitx.fcitx5.android.data.theme.ThemeManager
++import org.fcitx.fcitx5.android.data.theme.isRetroSilver26
+ import org.fcitx.fcitx5.android.input.broadcast.InputBroadcastReceiver
+ import org.fcitx.fcitx5.android.input.dependency.context
+ import org.fcitx.fcitx5.android.input.dependency.theme
+@@ -39,8 +40,34 @@ class PreeditComponent : UniqueComponent<PreeditComponent>(), Dependent, InputBr
+         }
+     }
+ 
++    private var lastPanel = FcitxEvent.InputPanelEvent.Data()
++    private var hasCandidates = false
++
++    override fun onCandidateUpdate(data: FcitxEvent.CandidateListEvent.Data) {
++        if (!theme.isRetroSilver26) return
++        val hasCandidatesNow = data.candidates.isNotEmpty()
++        if (hasCandidatesNow == hasCandidates) return
++        hasCandidates = hasCandidatesNow
++        renderPanel(lastPanel)
++    }
++
+     override fun onInputPanelUpdate(data: FcitxEvent.InputPanelEvent.Data) {
++        lastPanel = data
++        renderPanel(data)
++    }
++
++    private fun renderPanel(data: FcitxEvent.InputPanelEvent.Data) {
++        // The retro candidate bar displays short preedits inline. Keep the full panel for
++        // auxiliary text, longer compositions and editing in the middle of composition.
++        if (theme.isRetroSilver26 && hasCandidates && data.useInlineRetroPreedit()) {
++            ui.root.visibility = View.INVISIBLE
++            return
++        }
+         ui.update(data)
+         ui.root.visibility = if (ui.visible) View.VISIBLE else View.INVISIBLE
+     }
+ }
++
++internal fun FcitxEvent.InputPanelEvent.Data.useInlineRetroPreedit(): Boolean =
++    auxUp.isEmpty() && auxDown.isEmpty() && preedit.length in 1..8 &&
++        (preedit.cursor < 0 || preedit.cursor == preedit.length)
+diff --git a/app/src/main/java/org/fcitx/fcitx5/android/ui/main/settings/theme/KeyboardPreviewUi.kt b/app/src/main/java/org/fcitx/fcitx5/android/ui/main/settings/theme/KeyboardPreviewUi.kt
+index b8c048c..319a63b 100644
+--- a/app/src/main/java/org/fcitx/fcitx5/android/ui/main/settings/theme/KeyboardPreviewUi.kt
++++ b/app/src/main/java/org/fcitx/fcitx5/android/ui/main/settings/theme/KeyboardPreviewUi.kt
+@@ -19,9 +19,11 @@ import androidx.core.view.updateLayoutParams
+ import org.fcitx.fcitx5.android.data.prefs.AppPrefs
+ import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
+ import org.fcitx.fcitx5.android.data.theme.Theme
++import org.fcitx.fcitx5.android.data.theme.isRetroSilver26
+ import org.fcitx.fcitx5.android.data.theme.ThemeManager
+ import org.fcitx.fcitx5.android.data.theme.ThemePrefs.NavbarBackground
+ import org.fcitx.fcitx5.android.input.keyboard.TextKeyboard
++import org.fcitx.fcitx5.android.input.keyboard.insetRadiusDrawable
+ import org.fcitx.fcitx5.android.utils.navbarFrameHeight
+ import splitties.dimensions.dp
+ import splitties.views.backgroundColor
+@@ -184,7 +186,11 @@ class KeyboardPreviewUi(override val ctx: Context, val theme: Theme) : Ui {
+         if (this::fakeKeyboardWindow.isInitialized) {
+             fakeInputView.removeView(fakeKeyboardWindow)
+         }
+-        fakeKawaiiBar.backgroundColor = if (keyBorder) Color.TRANSPARENT else theme.barColor
++        if (theme.isRetroSilver26) {
++            fakeKawaiiBar.background = insetRadiusDrawable(ctx.dp(3), ctx.dp(2), ctx.dp(5f), theme.barColor)
++        } else {
++            fakeKawaiiBar.backgroundColor = if (keyBorder) Color.TRANSPARENT else theme.barColor
++        }
+         fakeKeyboardWindow = TextKeyboard(ctx, theme).also {
+             it.onAttach()
+         }
+diff --git a/app/src/main/res/drawable/ic_keycat_backspace_24.xml b/app/src/main/res/drawable/ic_keycat_backspace_24.xml
+new file mode 100644
+index 0000000..b14a270
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_keycat_backspace_24.xml
+@@ -0,0 +1,13 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:autoMirrored="true"
++    android:viewportWidth="24"
++    android:viewportHeight="24">
++    <path
++        android:pathData="M8,5.5 H21.5 V18.5 H8 L2,12 Z M11.5,9 L17.5,15 M17.5,9 L11.5,15"
++        android:strokeColor="#ffffff"
++        android:strokeLineCap="round"
++        android:strokeLineJoin="round"
++        android:strokeWidth="1.8" />
++</vector>
+diff --git a/app/src/main/res/values-zh-rCN/keycat_retro_strings.xml b/app/src/main/res/values-zh-rCN/keycat_retro_strings.xml
+new file mode 100644
+index 0000000..3f1a3ec
+--- /dev/null
++++ b/app/src/main/res/values-zh-rCN/keycat_retro_strings.xml
+@@ -0,0 +1,5 @@
++<resources>
++    <string name="keycat_retro_space">空格</string>
++    <string name="keycat_retro_language">中/英</string>
++    <string name="keycat_retro_space_input_method">空格，%1$s</string>
++</resources>
+diff --git a/app/src/main/res/values/keycat_retro_strings.xml b/app/src/main/res/values/keycat_retro_strings.xml
+new file mode 100644
+index 0000000..e94d120
+--- /dev/null
++++ b/app/src/main/res/values/keycat_retro_strings.xml
+@@ -0,0 +1,5 @@
++<resources>
++    <string name="keycat_retro_space">Space</string>
++    <string name="keycat_retro_language">中/英</string>
++    <string name="keycat_retro_space_input_method">Space, %1$s</string>
++</resources>
