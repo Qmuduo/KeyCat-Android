@@ -1,15 +1,16 @@
 diff --git a/app/build.gradle.kts b/app/build.gradle.kts
-index 53f1eb8..0f20c16 100644
+index 53f1eb8..7725710 100644
 --- a/app/build.gradle.kts
 +++ b/app/build.gradle.kts
-@@ -1,3 +1,6 @@
+@@ -1,3 +1,7 @@
 +import java.net.URI
 +import java.security.MessageDigest
++import java.util.zip.GZIPInputStream
 +
  plugins {
      id("org.fcitx.fcitx5.android.app-convention")
      id("org.fcitx.fcitx5.android.native-app-convention")
-@@ -13,7 +16,7 @@ android {
+@@ -13,7 +17,7 @@ android {
      namespace = "org.fcitx.fcitx5.android"
  
      defaultConfig {
@@ -18,7 +19,7 @@ index 53f1eb8..0f20c16 100644
          testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
  
          @Suppress("UnstableApiUsage")
-@@ -42,13 +45,13 @@ android {
+@@ -42,13 +46,13 @@ android {
          release {
              resValue("mipmap", "app_icon", "@mipmap/ic_launcher")
              resValue("mipmap", "app_icon_round", "@mipmap/ic_launcher_round")
@@ -34,7 +35,7 @@ index 53f1eb8..0f20c16 100644
          }
      }
  
-@@ -56,6 +59,61 @@ android {
+@@ -56,6 +60,63 @@ android {
          @Suppress("UnstableApiUsage")
          generateLocaleConfig = true
      }
@@ -73,9 +74,11 @@ index 53f1eb8..0f20c16 100644
 +        val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
 +            .joinToString("") { "%02x".format(it) }
 +        check(digest == sha256.get()) { "CC-CEDICT snapshot SHA-256 mismatch." }
-+        outputDirectory.file("keycat-dictionary/cc-cedict.txt.gz").get().asFile.apply {
++        outputDirectory.file("keycat-dictionary/cc-cedict.txt").get().asFile.apply {
 +            parentFile.mkdirs()
-+            writeBytes(bytes)
++            outputStream().use { output ->
++                GZIPInputStream(bytes.inputStream()).use { it.copyTo(output) }
++            }
 +        }
 +    }
 +}
@@ -86,7 +89,7 @@ index 53f1eb8..0f20c16 100644
 +    sha256.set("00e6c188df0056c42c0448386d0b4f532aa805d9fdd87aef139f72b421ace2f4")
 +    localArchive.set(layout.file(providers.gradleProperty("keycatCedictFile").map { file(it) }))
 +    offline.set(gradle.startParameter.isOffline)
-+    outputDirectory.set(layout.buildDirectory.dir("generated/keycatDictionary"))
++    outputDirectory.set(layout.buildDirectory.dir("generated/keycatDictionaryText"))
 +}
 +
 +androidComponents {
@@ -1402,10 +1405,10 @@ index 0000000..447fce8
 +}
 diff --git a/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/CandidateEnglishDictionary.kt b/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/CandidateEnglishDictionary.kt
 new file mode 100644
-index 0000000..61e2baa
+index 0000000..f3944f5
 --- /dev/null
 +++ b/app/src/main/java/org/fcitx/fcitx5/android/input/candidates/CandidateEnglishDictionary.kt
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,49 @@
 +/*
 + * SPDX-License-Identifier: LGPL-2.1-or-later
 + */
@@ -1419,7 +1422,6 @@ index 0000000..61e2baa
 +import kotlinx.coroutines.async
 +import timber.log.Timber
 +import java.io.IOException
-+import java.util.zip.GZIPInputStream
 +
 +internal object CandidateEnglishDictionary {
 +    private val scope = CoroutineScope(Dispatchers.IO)
@@ -1431,8 +1433,8 @@ index 0000000..61e2baa
 +        val assets = context.applicationContext.assets
 +        return words ?: scope.async {
 +            try {
-+                assets.open("keycat-dictionary/cc-cedict.txt.gz").use { stream ->
-+                    GZIPInputStream(stream).bufferedReader(Charsets.UTF_8).useLines { lines ->
++                assets.open("keycat-dictionary/cc-cedict.txt")
++                    .bufferedReader(Charsets.UTF_8).useLines { lines ->
 +                        buildMap {
 +                            lines.filterNot { it.startsWith('#') }.forEach { line ->
 +                                val match = entry.matchEntire(line) ?: return@forEach
@@ -1449,7 +1451,6 @@ index 0000000..61e2baa
 +                            }
 +                        }
 +                    }
-+                }
 +            } catch (error: IOException) {
 +                Timber.w(error, "Unable to read KeyCat candidate dictionary")
 +                emptyMap()
@@ -1459,7 +1460,7 @@ index 0000000..61e2baa
 +}
 diff --git a/app/src/main/assets/keycat-dictionary/NOTICE.txt b/app/src/main/assets/keycat-dictionary/NOTICE.txt
 new file mode 100644
-index 0000000..29907db
+index 0000000..f8de86e
 --- /dev/null
 +++ b/app/src/main/assets/keycat-dictionary/NOTICE.txt
 @@ -0,0 +1,11 @@
@@ -1472,5 +1473,5 @@ index 0000000..29907db
 +License: Creative Commons Attribution-ShareAlike 4.0 International
 +https://creativecommons.org/licenses/by-sa/4.0/
 +
-+The app bundles the unmodified gzip export. The candidate bar displays
++The app bundles the unmodified text from the gzip export. The candidate bar displays
 +one available English sense per matching Chinese entry.
